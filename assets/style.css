@@ -752,3 +752,19 @@ h3{font-size:20px;letter-spacing:-.015em;line-height:1.25}
 .logo-txt{font-weight:600;letter-spacing:.16em}
 .foot-logo span{font-weight:600;letter-spacing:.16em}
 .why h3{font-size:clamp(22px,2.2vw,30px)}
+
+/* ======================================================
+   Плотнее по вертикали: меньше воздуха между блоками
+   ====================================================== */
+section{padding:60px 0}
+.sec-top{margin-bottom:36px}
+.hero-v3{padding:48px 0 56px}
+.hero-scroll{margin-top:40px}
+.why{margin-top:40px;padding:44px 48px;gap:40px}
+.all-services{margin-top:44px}
+.tools{margin-top:40px;padding-top:24px}
+.news-more{margin-top:24px}
+.lead-box{padding:52px 56px}
+.invite .btns{margin-top:22px}
+.quiz{padding:40px 44px}
+@media (max-width:640px){section{padding:48px 0}.sec-top{margin-bottom:24px}.hero-v3{padding:36px 0 44px}.why{padding:28px 20px}.lead-box{padding:28px 20px}.quiz{padding:22px 18px}}
