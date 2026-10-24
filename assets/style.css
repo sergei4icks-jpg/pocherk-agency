@@ -314,8 +314,9 @@ section{padding:128px 0;scroll-margin-top:70px}
 .lead-box>div{position:relative}
 .lead-box p{color:var(--ink-2)}
 .lead-box form{display:grid;gap:12px;position:relative}
-.lead-box input{border:1px solid var(--line);border-radius:14px;padding:18px 20px;font-size:16px;color:var(--ink);background:#fff;outline:none;transition:border-color .2s}
-.lead-box input:focus{border-color:var(--ink)}
+.lead-box input,.lead-box textarea{border:1px solid var(--line);border-radius:14px;padding:18px 20px;font-size:16px;font-family:inherit;color:var(--ink);background:#fff;outline:none;transition:border-color .2s}
+.lead-box textarea{resize:vertical;min-height:120px;line-height:1.45}
+.lead-box input:focus,.lead-box textarea:focus{border-color:var(--ink)}
 .lead-box .btn{background:var(--red);color:#fff;width:100%;margin-top:4px;box-shadow:0 10px 24px -12px rgba(179,18,43,.7)}
 .lead-box .btn:hover{background:var(--red-2)}
 @media (max-width:860px){.lead-box{grid-template-columns:1fr;padding:36px 22px;gap:28px;border-radius:24px}}
