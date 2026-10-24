@@ -250,11 +250,11 @@ document.querySelectorAll('.btn-red, .btn-dark').forEach(b => {
     ctx.globalCompositeOperation = 'source-over';
     ctx.clearRect(0, 0, W, H);
     // три наложенных пятна с мягкими краями
-    const blobs = [[.5, .5, .56, .97], [.34, .38, .34, .6], [.66, .64, .34, .6], [.5, .5, .4, .5]];
+    const blobs = [[.5, .5, .5, 1], [.34, .38, .34, .7], [.66, .64, .34, .7], [.5, .5, .42, .8]];
     blobs.forEach(([x, y, r, a]) => {
       const g = ctx.createRadialGradient(x * W, y * H, 0, x * W, y * H, r * Math.min(W, H));
       g.addColorStop(0, `rgba(179,18,43,${a})`);
-      g.addColorStop(.55, `rgba(179,18,43,${a * .75})`);
+      g.addColorStop(.7, `rgba(179,18,43,${a * .92})`);
       g.addColorStop(1, 'rgba(179,18,43,0)');
       ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
     });

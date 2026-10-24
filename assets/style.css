@@ -446,7 +446,7 @@ section{padding:104px 0}
 @media (max-width:640px){.topbar .wrap{height:34px}.topbar span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
 
 /* лого: слово пером + дескриптор текстом */
-.logo{display:flex;align-items:center;gap:14px;text-decoration:none;color:var(--ink)}
+.logo{display:flex;align-items:center;gap:14px;text-decoration:none;color:var(--ink);flex:none;white-space:nowrap}
 .logo img{height:50px;width:auto}
 .logo-txt{font:500 10.5px/1.25 var(--caps);letter-spacing:.2em;text-transform:uppercase;color:var(--red);padding-left:14px;border-left:1px solid var(--red)}
 @media (max-width:900px){.logo img{height:40px}.logo-txt{font-size:9.5px;letter-spacing:.16em;padding-left:10px}}
@@ -609,8 +609,12 @@ section{padding:104px 0}
 .erase-badge{display:inline-flex;align-items:center;gap:10px;font-size:13px;color:var(--muted)}
 .erase-badge i{width:30px;height:30px;border-radius:9px;background:var(--blush);position:relative;flex:none}
 .erase-badge i::after{content:"";position:absolute;left:10px;top:7px;width:8px;height:13px;border:2px solid var(--red);border-top:0;border-left:0;transform:rotate(45deg)}
-.erase-hint{position:absolute;left:50%;bottom:-6px;transform:translateX(-50%);font:500 12px/1 var(--caps);letter-spacing:.2em;text-transform:uppercase;color:var(--muted);transition:opacity .4s;white-space:nowrap}
-.hero-erase.touched .erase-hint{opacity:0}
+.erase-tag{position:absolute;right:6%;top:9%;background:#fff;color:var(--red);border:1px solid var(--line);border-radius:999px;padding:9px 14px;font:500 12px/1 var(--caps);letter-spacing:.18em;text-transform:uppercase;box-shadow:var(--shadow);transform:rotate(6deg);pointer-events:none;transition:opacity .4s,transform .4s;white-space:nowrap;animation:tag-bob 2.4s ease-in-out infinite}
+@keyframes tag-bob{0%,100%{transform:rotate(6deg) translateY(0)}50%{transform:rotate(6deg) translateY(-5px)}}
+.hero-erase.touched .erase-tag{opacity:0;transform:rotate(6deg) scale(.9);animation:none}
+/* карточка под пятном не видна, пока его не начали стирать */
+.erase-card{opacity:0;transition:opacity .3s}
+.hero-erase.touched .erase-card,.hero-erase.done .erase-card{opacity:1}
 @media (max-width:960px){.hero-v3 .hero-grid{grid-template-columns:1fr}.hero-erase{display:grid;max-width:360px;margin:8px auto 0}}
 @media (max-width:560px){.hero-v3 .hero-nums{grid-template-columns:1fr 1fr}}
 @media (prefers-reduced-motion:reduce){.hero-erase{animation:none;opacity:1}}
