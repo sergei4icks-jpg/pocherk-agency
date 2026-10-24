@@ -236,3 +236,75 @@ document.querySelectorAll('.btn-red, .btn-dark').forEach(b => {
   });
   document.body.appendChild(box);
 })();
+
+// ---------- первый экран: красное пятно, которое можно стереть мышкой ----------
+(() => {
+  const box = document.querySelector('[data-erase]');
+  if (!box) return;
+  const cv = box.querySelector('canvas');
+  const ctx = cv.getContext('2d');
+  let W = 0, H = 0, dpr = 1, erased = 0, cells, cols, rows, regrow = 0;
+
+  const paint = () => {
+    ctx.save(); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.clearRect(0, 0, W, H);
+    // три наложенных пятна с мягкими краями
+    const blobs = [[.5, .5, .56, .97], [.34, .38, .34, .6], [.66, .64, .34, .6], [.5, .5, .4, .5]];
+    blobs.forEach(([x, y, r, a]) => {
+      const g = ctx.createRadialGradient(x * W, y * H, 0, x * W, y * H, r * Math.min(W, H));
+      g.addColorStop(0, `rgba(179,18,43,${a})`);
+      g.addColorStop(.55, `rgba(179,18,43,${a * .75})`);
+      g.addColorStop(1, 'rgba(179,18,43,0)');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    });
+    ctx.restore();
+    cells = new Uint8Array(cols * rows); erased = 0;
+    box.classList.remove('done');
+  };
+  const size = () => {
+    dpr = Math.min(2, devicePixelRatio || 1);
+    W = cv.clientWidth; H = cv.clientHeight;
+    cv.width = W * dpr; cv.height = H * dpr;
+    cols = Math.ceil(W / 24); rows = Math.ceil(H / 24);
+    paint();
+  };
+  size(); addEventListener('resize', size);
+
+  let last = null;
+  const erase = (x, y) => {
+    const r = Math.max(36, W * .09);
+    ctx.save(); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.globalCompositeOperation = 'destination-out';
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(.6, 'rgba(0,0,0,.9)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g;
+    // ведём кистью от прошлой точки, чтобы быстрые движения не рвались
+    const steps = last ? Math.ceil(Math.hypot(x - last[0], y - last[1]) / (r * .35)) : 1;
+    for (let i = 1; i <= steps; i++) {
+      const px = last ? last[0] + (x - last[0]) * i / steps : x;
+      const py = last ? last[1] + (y - last[1]) * i / steps : y;
+      ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2); ctx.fill();
+      const c = Math.floor(px / 24), rw = Math.floor(py / 24);
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const cc = c + dx, rr = rw + dy;
+        if (cc < 0 || rr < 0 || cc >= cols || rr >= rows) continue;
+        const k = rr * cols + cc;
+        if (!cells[k]) { cells[k] = 1; erased++; }
+      }
+    }
+    ctx.restore();
+    last = [x, y];
+    // когда стёрто больше половины круга, убираем остаток и через паузу рисуем пятно заново
+    if (erased / (cols * rows) > .42 && !box.classList.contains('done')) {
+      box.classList.add('done');
+      cv.style.transition = 'opacity .6s'; cv.style.opacity = 0;
+      clearTimeout(regrow);
+      regrow = setTimeout(() => { paint(); cv.style.opacity = 1; last = null; }, 4000);
+    }
+  };
+  const pos = e => { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+  cv.addEventListener('pointermove', e => { box.classList.add('touched'); erase(...pos(e)); });
+  cv.addEventListener('pointerdown', e => { box.classList.add('touched'); last = null; erase(...pos(e)); });
+  cv.addEventListener('pointerleave', () => { last = null; });
+})();
