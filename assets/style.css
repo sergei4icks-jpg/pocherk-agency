@@ -17,8 +17,8 @@
   --shadow:0 1px 2px rgba(22,22,26,.04),0 12px 32px -12px rgba(22,22,26,.10);
   --shadow-lg:0 2px 4px rgba(22,22,26,.04),0 30px 60px -24px rgba(22,22,26,.18);
   --hand:'Comforter', cursive;
-  --caps:'Oswald', 'Arial Narrow', sans-serif;
-  --text:'Golos Text', system-ui, -apple-system, sans-serif;
+  --caps:'Inter', system-ui, -apple-system, sans-serif;
+  --text:'Inter', system-ui, -apple-system, sans-serif;
 }
 *{box-sizing:border-box}
 html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
@@ -732,3 +732,23 @@ section{padding:104px 0}
   .top-tg{margin-right:0}
 }
 @media (min-width:1181px) and (max-width:1300px){.logo-txt{display:none}.top .btn{padding:0 16px}}
+
+/* ======================================================
+   Шрифт как у Коммерсанта: единый гротеск Inter.
+   Заголовки жирные, строчные, с плотным трекингом.
+   ====================================================== */
+h1,h2,h3{font-weight:700;text-transform:none;letter-spacing:-.025em;line-height:1.08}
+h1{font-size:clamp(36px,4.6vw,64px)}
+h2{font-size:clamp(28px,3.2vw,44px)}
+h3{font-size:20px;letter-spacing:-.015em;line-height:1.25}
+.hero-v3 h1{font-size:clamp(34px,3.7vw,52px)}
+.hero h1 .hand{font-size:1.15em}
+.sol h3,.case h3{font-size:22px}
+.tab-panel h3{font-size:clamp(24px,2.2vw,30px)}
+.erase-card b,.done b,.foot p.foot-tag{text-transform:none;font-weight:700;letter-spacing:-.02em}
+.hero-nums b,.case-res b,.invite-nums b,.price-from,.prices td:last-child,.all-grid em,.dash>div b{font-weight:600;letter-spacing:-.02em}
+.sol-n,.step::before,.review .q{font-weight:300}
+.kicker,.news-date,.case-tag,.tools-label,.cmp-head,.step .when,.erase-tag,.all-head .muted{letter-spacing:.14em}
+.logo-txt{font-weight:600;letter-spacing:.16em}
+.foot-logo span{font-weight:600;letter-spacing:.16em}
+.why h3{font-size:clamp(22px,2.2vw,30px)}
