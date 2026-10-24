@@ -698,3 +698,18 @@ section{padding:104px 0}
 
 /* страница кейсов: заголовок */
 .page-head-cases .sec-top h1{font-size:clamp(34px,4.4vw,56px)}
+
+/* первый экран компактнее: умещается в один экран ноутбука */
+.hero-v3{padding:64px 0 72px}
+.hero-v3 .hero-grid{grid-template-columns:1fr .78fr;gap:56px;align-items:center}
+.hero-v3 h1{font-size:clamp(34px,3.9vw,54px);max-width:640px}
+.hero-v3 h1 .hand{font-size:1.1em}
+.hero-v3 .lead{margin-top:22px;font-size:17px;max-width:560px}
+.hero-v3 .btns{margin-top:30px}
+.hero-v3 .hero-nums{margin-top:40px;padding-top:26px;gap:32px}
+.hero-v3 .hero-nums b{font-size:32px}
+.hero-erase{max-width:400px}
+.erase-card{max-width:290px;padding:24px 26px}
+.erase-card b{font-size:26px;margin:12px 0 8px}
+.erase-card p{font-size:14px}
+@media (max-width:960px){.hero-v3{padding:48px 0 56px}.hero-erase{max-width:320px}}
