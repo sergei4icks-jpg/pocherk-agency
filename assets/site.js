@@ -51,6 +51,14 @@ if (header) {
   if (saved && niche()) { niche().value = saved; sessionStorage.removeItem('niche'); }
 }
 
+// Ссылка из меню на услугу открывает её пункт в списке «Что мы предлагаем»
+const openFromHash = () => {
+  const el = location.hash && document.getElementById(decodeURIComponent(location.hash.slice(1)));
+  if (el && el.tagName === 'DETAILS') el.open = true;
+};
+addEventListener('hashchange', openFromHash);
+openFromHash();
+
 // Вкладки услуг
 document.querySelectorAll('[role="tablist"]').forEach(list => {
   const tabs = [...list.querySelectorAll('[role="tab"]')];
@@ -75,17 +83,49 @@ document.querySelectorAll('[role="tablist"]').forEach(list => {
 });
 
 // Отправка заявки.
-// TODO: подключить приём заявок (бот в Telegram или почта). Пока данные только выводятся в консоль.
+// Адрес веб-приложения Google Apps Script (заявки/apps-script.gs): таблица + почта + Telegram.
+// Пока адрес пустой, заявка только выводится в консоль.
+const LEAD_URL = '';
 function sendLead(data) {
-  console.log('Заявка:', data);
-  return Promise.resolve();
+  if (!LEAD_URL) { console.log('Заявка (приём не подключён):', data); return Promise.resolve(); }
+  // text/plain, чтобы браузер не делал предварительный CORS-запрос, который Google не принимает
+  return fetch(LEAD_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(data) })
+    .then(r => r.json())
+    .then(r => { if (!r.ok) throw new Error(r.msg || 'lead failed'); });
 }
 const collect = form => {
   const out = {};
   new FormData(form).forEach((v, k) => { out[k] = out[k] ? out[k] + ', ' + v : v; });
   out.page = location.pathname;
+  out.form = form.hasAttribute('data-quiz') ? 'quiz' : 'lead';
+  if (out.consent) out.consent_at = new Date().toISOString();
   return out;
 };
+// Скрытое поле-ловушка для ботов и сообщение об ошибке отправки
+document.querySelectorAll('[data-quiz], [data-lead]').forEach(form => {
+  form.insertAdjacentHTML('afterbegin', '<input name="website" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0">');
+});
+const leadError = (form, anchor) => {
+  let el = form.querySelector('.form-err');
+  if (!el) {
+    el = document.createElement('p');
+    el.className = 'form-err';
+    el.setAttribute('role', 'alert');
+    el.textContent = 'Не получилось отправить заявку. Проверьте интернет и попробуйте ещё раз.';
+    anchor.insertAdjacentElement('beforebegin', el);
+  }
+  el.hidden = false;
+};
+// Обязательные поля: текст должен быть заполнен, галочка согласия — отмечена
+const isEmpty = x => x.type === 'checkbox' ? !x.checked : !x.value.trim();
+const flagEmpty = x => {
+  x.focus();
+  if (x.type === 'checkbox') {
+    const lab = x.closest('.agree');
+    if (lab) { lab.classList.add('need'); x.addEventListener('change', () => lab.classList.remove('need'), { once: true }); }
+  } else x.style.borderColor = 'var(--red)';
+};
+const busy = (btn, on) => { if (btn) { btn.disabled = on; btn.style.opacity = on ? .6 : ''; } };
 
 // Квиз
 document.querySelectorAll('[data-quiz]').forEach(form => {
@@ -107,13 +147,16 @@ document.querySelectorAll('[data-quiz]').forEach(form => {
   form.addEventListener('submit', e => {
     e.preventDefault();
     if (i < steps.length - 1) { i++; show(); return; }
-    const req = [...steps[i].querySelectorAll('[required]')].find(x => !x.value.trim());
-    if (req) { req.focus(); req.style.borderColor = 'var(--red)'; return; }
+    const req = [...steps[i].querySelectorAll('[required]')].find(isEmpty);
+    if (req) { flagEmpty(req); return; }
+    if (next.disabled) return;
+    busy(next, true);
     sendLead(collect(form)).then(() => {
+      const err = form.querySelector('.form-err'); if (err) err.hidden = true;
       steps.forEach(s => s.hidden = true);
       done.hidden = false;
       form.querySelector('.q-bottom').hidden = true;
-    });
+    }, () => leadError(form, form.querySelector('.q-bottom'))).finally(() => busy(next, false));
   });
   show();
 });
@@ -122,11 +165,14 @@ document.querySelectorAll('[data-quiz]').forEach(form => {
 document.querySelectorAll('[data-lead]').forEach(form => {
   form.addEventListener('submit', e => {
     e.preventDefault();
-    const req = [...form.querySelectorAll('[required]')].find(x => !x.value.trim());
-    if (req) { req.focus(); return; }
+    const req = [...form.querySelectorAll('[required]')].find(isEmpty);
+    if (req) { flagEmpty(req); return; }
+    const btn = form.querySelector('[type="submit"]');
+    if (btn.disabled) return;
+    busy(btn, true);
     sendLead(collect(form)).then(() => {
       form.innerHTML = '<div class="done"><b>Спасибо!</b><p>Заявка у нас, скоро напишем.</p></div>';
-    });
+    }, () => { busy(btn, false); leadError(form, btn); });
   });
 });
 
@@ -148,7 +194,7 @@ document.querySelectorAll('.grid.reveal, .steps.reveal, .cases').forEach(g => {
 
 // Счётчики: «+60», «82 тыс.», «10 в день» считаются от нуля при появлении
 const counters = [];
-document.querySelectorAll('.hero-nums b, .case-res b').forEach(el => {
+document.querySelectorAll('.hero-nums b, .case-res b, .pk-stats b').forEach(el => {
   const m = el.textContent.match(/^(\+?)(\d+)(.*)$/);
   if (!m) return;
   el.dataset.count = '';
@@ -213,28 +259,48 @@ document.querySelectorAll('.btn-red, .btn-dark').forEach(b => {
   });
 });
 
-// Уведомление о куки: показываем один раз, согласие запоминаем в localStorage
+// Уведомление о cookie: «Принять» или «Только необходимые».
+// Яндекс Метрика загружается только после «Принять». Номер счётчика впишите в METRIKA_ID.
 (() => {
-  const KEY = 'pocherk-cookies-ok';
-  let ok = false;
-  try { ok = localStorage.getItem(KEY) === '1'; } catch (e) {}
-  if (ok) return;
-  // на вложенных страницах стили подключены как ../assets/, значит и политика лежит на уровень выше
+  const KEY = 'pocherk-cookies';
+  const METRIKA_ID = '';
+  const get = () => { try { return localStorage.getItem(KEY); } catch (e) { return null; } };
+  const set = v => { try { localStorage.setItem(KEY, v); } catch (e) {} };
+  let metrikaOn = false;
+  const loadMetrika = () => {
+    if (!METRIKA_ID || metrikaOn) return;
+    metrikaOn = true;
+    window.ym = window.ym || function () { (ym.a = ym.a || []).push(arguments); }; ym.l = +new Date();
+    const s = document.createElement('script'); s.async = true; s.src = 'https://mc.yandex.ru/metrika/tag.js';
+    document.head.appendChild(s);
+    ym(+METRIKA_ID, 'init', { clickmap: true, trackLinks: true, accurateTrackBounce: true, webvisor: false });
+  };
+  // путь до корня сайта берём из ссылки на стили: assets/, ../assets/ или ../../assets/
   const css = document.querySelector('link[rel="stylesheet"][href*="assets/style.css"]');
-  const root = css && css.getAttribute('href').startsWith('../') ? '../' : '';
-  const box = document.createElement('div');
-  box.className = 'cookie';
-  box.setAttribute('role', 'region');
-  box.setAttribute('aria-label', 'Уведомление о куки');
-  box.innerHTML = '<p>У нас есть куки, без них никуда. Поэтому просто кликните «Ок» и давайте дальше. <a href="' + root + 'politika/">Подробнее</a></p>' +
-    '<button type="button" class="btn btn-red">Ок</button>';
-  box.querySelector('button').addEventListener('click', () => {
-    try { localStorage.setItem(KEY, '1'); } catch (e) {}
-    box.classList.add('out');
-    box.addEventListener('animationend', () => box.remove(), { once: true });
-    setTimeout(() => box.remove(), 500);
-  });
-  document.body.appendChild(box);
+  const root = css ? css.getAttribute('href').split('assets/')[0] : '';
+  const show = () => {
+    if (document.querySelector('.cookie:not(.out)')) return;
+    const box = document.createElement('div');
+    box.className = 'cookie';
+    box.setAttribute('role', 'region');
+    box.setAttribute('aria-label', 'Настройки cookie');
+    box.innerHTML = '<p>Мы используем необходимые cookie, чтобы сайт работал, и с вашего разрешения — Яндекс Метрику для статистики. <a href="' + root + 'politika/#cookie">Подробнее</a></p>' +
+      '<div class="cookie-btns"><button type="button" class="btn btn-red" data-v="all">Принять</button>' +
+      '<button type="button" class="btn-ghost" data-v="necessary">Только необходимые</button></div>';
+    box.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+      set(b.dataset.v);
+      if (b.dataset.v === 'all') loadMetrika();
+      else if (metrikaOn) location.reload(); // отозвали согласие — перезагружаем страницу без счётчика
+      box.classList.add('out');
+      box.addEventListener('animationend', () => box.remove(), { once: true });
+      setTimeout(() => box.remove(), 500);
+    }));
+    document.body.appendChild(box);
+  };
+  const choice = get();
+  if (choice === 'all') loadMetrika();
+  else if (choice !== 'necessary') show();
+  document.querySelectorAll('[data-cookie-settings]').forEach(b => b.addEventListener('click', show));
 })();
 
 // ---------- первый экран: красное пятно, которое можно стереть мышкой ----------
@@ -307,4 +373,69 @@ document.querySelectorAll('.btn-red, .btn-dark').forEach(b => {
   cv.addEventListener('pointermove', e => { box.classList.add('touched'); erase(...pos(e)); });
   cv.addEventListener('pointerdown', e => { box.classList.add('touched'); last = null; erase(...pos(e)); });
   cv.addEventListener('pointerleave', () => { last = null; });
+})();
+
+// Линии-росчерки на тёмных экранах: пучки тонких штрихов, как след пера
+(function () {
+  const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const presets = {
+    hero: [
+      { y: .40, a: .30, f: 1.15, p: 0.4, s: .62, w: .10, c: '240,66,92', o: .15, v: .10 },
+      { y: .55, a: .34, f: .85, p: 2.6, s: .42, w: .07, c: '255,255,255', o: .085, v: -.07 },
+      { y: .72, a: .22, f: 1.5, p: 4.4, s: .34, w: .12, c: '179,18,43', o: .22, v: .06 }
+    ],
+    low: [
+      { y: .86, a: .16, f: 1.1, p: 1.2, s: .34, w: .09, c: '240,66,92', o: .12, v: .07 },
+      { y: .96, a: .13, f: .8, p: 3.4, s: .24, w: .06, c: '255,255,255', o: .07, v: -.05 }
+    ]
+  };
+  document.querySelectorAll('[data-silk]').forEach(cv => {
+    const ctx = cv.getContext('2d');
+    const set = presets[cv.dataset.silk] || presets.low;
+    let W = 0, H = 0, t = 0, seen = false, last = 0;
+    const size = () => {
+      const r = cv.getBoundingClientRect(), d = Math.min(devicePixelRatio || 1, 1.5);
+      W = r.width; H = r.height; cv.width = W * d; cv.height = H * d; ctx.setTransform(d, 0, 0, d, 0, 0);
+      draw();
+    };
+    function draw() {
+      ctx.clearRect(0, 0, W, H);
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.lineWidth = .8;
+      const lines = W < 700 ? 26 : 44, step = W < 700 ? 22 : 14;
+      set.forEach(r => {
+        for (let i = 0; i < lines; i++) {
+          const k = i / (lines - 1), e = Math.sin(Math.PI * k);
+          ctx.strokeStyle = 'rgba(' + r.c + ',' + (r.o * (.25 + .75 * e)).toFixed(3) + ')';
+          ctx.beginPath();
+          for (let x = -30; x <= W + 30; x += step) {
+            const u = x / Math.max(W, 1) * Math.PI * 2;
+            const main = Math.sin(u * r.f + r.p + t * r.v);
+            const fold = Math.sin(u * r.f * 1.9 + r.p * 2 - t * r.v * .7);
+            const y = H * (r.y + r.a * main + (k - .5) * r.s * (.35 + .65 * fold) + r.w * Math.sin(u * .7 + k * 2.4 + t * r.v));
+            x === -30 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+          }
+          ctx.stroke();
+        }
+      });
+    }
+    function loop(now) {
+      if (seen && !document.hidden && now - last > 33) {
+        t += (now - last) / 1000; last = now; draw();
+      }
+      if (!still) requestAnimationFrame(loop);
+    }
+    addEventListener('resize', size, { passive: true });
+    if ('IntersectionObserver' in window) {
+      new IntersectionObserver(es => { seen = es[0].isIntersecting; last = performance.now(); }).observe(cv);
+    } else seen = true;
+    size();
+    if (!still) requestAnimationFrame(loop);
+  });
+
+  // Стрелки у ленты результатов
+  const rail = document.querySelector('[data-rail-track]');
+  document.querySelectorAll('[data-rail]').forEach(b => b.addEventListener('click', () => {
+    if (rail) rail.scrollBy({ left: +b.dataset.rail * 248, behavior: still ? 'auto' : 'smooth' });
+  }));
 })();
