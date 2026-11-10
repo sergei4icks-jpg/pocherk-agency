@@ -5,10 +5,10 @@ DirectoryIndex index.html index.php
 
 <IfModule mod_rewrite.c>
   RewriteEngine On
-  # только https и без www — ВКЛЮЧИТЬ после выпуска сертификата Let's Encrypt (раскомментировать 3 строки)
-  # RewriteCond %{HTTPS} off [OR]
-  # RewriteCond %{HTTP_HOST} ^www\. [NC]
-  # RewriteRule ^ https://pocherkagency.ru%{REQUEST_URI} [L,R=301]
+  # только https и без www (сертификат Let's Encrypt выпущен в ISPmanager 10.11.2026, продлевается сам)
+  RewriteCond %{HTTP:X-Forwarded-Proto} !=https [OR]
+  RewriteCond %{HTTP_HOST} ^www\. [NC]
+  RewriteRule ^ https://pocherkagency.ru%{REQUEST_URI} [L,R=301]
   # служебное закрыто снаружи
   RewriteRule ^api/(config|config\.sample)\.php$ - [F,L]
   RewriteRule ^api/data(/|$) - [F,L]
@@ -26,6 +26,7 @@ DirectoryIndex index.html index.php
 <IfModule mod_headers.c>
   Header always set X-Content-Type-Options "nosniff"
   Header always set Referrer-Policy "strict-origin-when-cross-origin"
+  Header always set Strict-Transport-Security "max-age=31536000"
 </IfModule>
 
 <IfModule mod_expires.c>
