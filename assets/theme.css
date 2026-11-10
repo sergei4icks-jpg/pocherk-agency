@@ -439,7 +439,7 @@
 /* На телефонах (особенно iPhone) эффект «чернил» из logo-word.svg считается в низком разрешении и рвёт линии.
    Поэтому на узких экранах показываем тот же логотип без эффекта. */
 @media (max-width:900px){
-  .top .logo img{content:url(../img/logo-word-plain.svg)}
+  .top .logo img,.foot-logo img{content:url(../img/logo-word-plain.svg)}
 }
 
 /* «Сотри меня» на телефоне: палец на пятне стирает, а не прокручивает страницу (10.11.2026) */
