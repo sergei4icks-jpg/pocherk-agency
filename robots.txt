@@ -1,6 +1,8 @@
 # Сайт открыт для поисковых систем и нейросетей.
 User-agent: *
 Allow: /
+Disallow: /zayavki/
+Disallow: /api/
 
 # Боты нейросетей перечислены явно, чтобы доступ был открыт и для тех,
 # кто проверяет только собственную группу правил.
@@ -19,5 +21,7 @@ User-agent: DuckAssistBot
 User-agent: Meta-ExternalAgent
 User-agent: MistralAI-User
 Allow: /
+Disallow: /zayavki/
+Disallow: /api/
 
 Sitemap: https://pocherkagency.ru/sitemap.xml
