@@ -25,3 +25,4 @@ Disallow: /zayavki/
 Disallow: /api/
 
 Sitemap: https://pocherkagency.ru/sitemap.xml
+Sitemap: https://pocherkagency.ru/novosti/sitemap.xml

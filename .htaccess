@@ -14,6 +14,12 @@ DirectoryIndex index.html index.php
   RewriteRule ^api/data(/|$) - [F,L]
   RewriteRule (^|/)\.(git|DS_Store) - [F,L]
   RewriteRule ^deploy\.sh$ - [F,L]
+  RewriteRule ^api/news-lib\.php$ - [F,L]
+  # новости из бота: список, карта сайта и страницы заметок собирает PHP (данные вне сайта, см. api/news-lib.php)
+  RewriteRule ^novosti/index\.html$ https://pocherkagency.ru/novosti/ [R=301,L]
+  RewriteRule ^novosti/?$ novosti/index.php [L]
+  RewriteRule ^novosti/sitemap\.xml$ novosti/sitemap.php [L]
+  RewriteRule ^novosti/([a-z0-9-]+)/?$ novosti/item.php?slug=$1 [L,QSA]
 </IfModule>
 
 <FilesMatch "\.(json|log|sh|md)$">

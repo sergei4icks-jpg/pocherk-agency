@@ -410,3 +410,34 @@
 .cp-mark-in{width:min(var(--mw,420px),88%)}
 .cp-next .sw.logo{background:radial-gradient(70% 70% at 50% 50%,color-mix(in srgb,var(--cv) 45%,transparent),transparent 75%),#0C0D12}
 .cp-next .sw.logo img{width:70%;max-height:62%;object-fit:contain;transform:none;box-shadow:none;border-radius:0}
+
+/* Логотип на телефоне: крупнее и чуть толще линии, подпись мельче (10.11.2026) */
+@media (max-width:600px){
+  .logo{gap:10px}
+  .logo img{height:48px}
+  .pk .logo img{filter:brightness(0) invert(1) drop-shadow(0 0 .5px #fff) drop-shadow(0 0 .5px #fff)}
+  .logo-txt{font-size:8px;letter-spacing:.12em;padding-left:9px}
+}
+
+/* Обложки кейсов на телефоне: цифра сверху, скриншот снизу, без наложения (10.11.2026) */
+@media (max-width:600px){
+  .case-cover{aspect-ratio:1/1;padding:20px}
+  .case-cover .cv-num{top:48px;bottom:auto;left:20px;right:20px;max-width:none}
+  .case-cover .cv-num b{font-size:32px;margin-bottom:6px}
+  .case-cover .cv-num span{max-width:30ch}
+  .cv-shot{width:80%;right:-10%;bottom:-10%}
+  .cv-chat{width:68%;right:-8%;bottom:-24%}
+  .cv-phone{width:42%;right:8%;bottom:-40%}
+  .cv-pills{top:auto;bottom:20px;right:20px;width:64%;transform:rotate(-3deg)}
+  .cv-pills div:nth-child(n+3){display:none}
+  /* цифры под кейсом: переносятся строкой, а не вылезают за край */
+  .cases .case .case-res{display:flex;flex-wrap:wrap;gap:16px 28px}
+  .cases .case .case-res>*{flex:0 1 auto;min-width:0}
+  .pk .cases .case .case-res b{font-size:22px}
+}
+
+/* На телефонах (особенно iPhone) эффект «чернил» из logo-word.svg считается в низком разрешении и рвёт линии.
+   Поэтому на узких экранах показываем тот же логотип без эффекта. */
+@media (max-width:900px){
+  .top .logo img{content:url(../img/logo-word-plain.svg)}
+}
