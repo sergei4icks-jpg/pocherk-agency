@@ -85,8 +85,20 @@ document.querySelectorAll('[role="tablist"]').forEach(list => {
 // Отправка заявки.
 // Пока заявки уходят письмом: кнопка открывает почту посетителя с готовым письмом на LEAD_EMAIL.
 // Google Apps Script (заявки/apps-script.gs) не подключаем: по 152-ФЗ данные сначала должны попадать в базу в РФ.
-// Когда появится российский приём, вписать адрес в LEAD_URL — форма начнёт отправлять туда.
-const LEAD_URL = '';
+// Приём в РФ: api/lead.php на хостинге Рег.ру. Пока сайт на GitHub Pages (там PHP нет) или открыт локально — письмо, как раньше.
+const LEAD_URL = /(^|\.)pocherkagency\.ru$/.test(location.hostname) ? '/api/lead.php' : '';
+// UTM-метки первого захода запоминаем на время визита, чтобы видеть источник заявки
+(() => {
+  try {
+    const p = new URLSearchParams(location.search);
+    const utm = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term']
+      .filter(k => p.get(k)).map(k => k.replace('utm_', '') + '=' + p.get(k)).join('&');
+    if (utm && !sessionStorage.getItem('pk-utm')) sessionStorage.setItem('pk-utm', utm);
+  } catch (e) {}
+})();
+// Счётчик Яндекс Метрики; цель «lead» — заявка сохранена на сервере, «lead_mail» — открыто письмо с заявкой
+const PK_METRIKA_ID = 114160182;
+const pkGoal = name => { try { if (typeof window.ym === 'function') window.ym(PK_METRIKA_ID, 'reachGoal', name); } catch (e) {} };
 const LEAD_EMAIL = 'sergei4icks@yandex.ru';
 const LEAD_LABELS = { service: 'Направление', have: 'Что уже есть', niche: 'Ниша', city: 'Город', goal: 'Задача', task: 'Задача', name: 'Имя', contact: 'Контакт' };
 const leadMailto = data => {
@@ -98,16 +110,22 @@ const leadMailto = data => {
 const leadDoneHtml = (data, title) => '<b>' + title + '</b><p class="muted">Открылось письмо с вашей заявкой: нажмите в нём «Отправить». '
   + 'Если почта не открылась, <a href="' + leadMailto(data) + '">откройте письмо ещё раз</a> или напишите на <a href="mailto:' + LEAD_EMAIL + '">' + LEAD_EMAIL + '</a>.</p>';
 function sendLead(data) {
-  if (!LEAD_URL) { location.href = leadMailto(data); return Promise.resolve(); }
+  // Возвращает 'server', если заявка сохранена на сервере, или 'mail', если открыли письмо
+  const byMail = () => { location.href = leadMailto(data); return 'mail'; };
+  if (!LEAD_URL) return Promise.resolve(byMail());
   // text/plain, чтобы браузер не делал предварительный CORS-запрос
   return fetch(LEAD_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(data) })
-    .then(r => r.json())
-    .then(r => { if (!r.ok) throw new Error(r.msg || 'lead failed'); });
+    .then(r => {
+      // приёма на сервере нет (сайт ещё на GitHub Pages: 404 или не PHP) — отправляем письмом
+      if (r.status === 404 || r.status === 405 || !(r.headers.get('content-type') || '').includes('json')) return byMail();
+      return r.json().then(j => { if (!j.ok) throw new Error(j.msg || 'lead failed'); return 'server'; });
+    });
 }
 const collect = form => {
   const out = {};
   new FormData(form).forEach((v, k) => { out[k] = out[k] ? out[k] + ', ' + v : v; });
   out.page = location.pathname;
+  try { const u = sessionStorage.getItem('pk-utm'); if (u) out.utm = u; } catch (e) {}
   out.form = form.hasAttribute('data-quiz') ? 'quiz' : 'lead';
   if (out.consent) out.consent_at = new Date().toISOString();
   return out;
@@ -163,9 +181,10 @@ document.querySelectorAll('[data-quiz]').forEach(form => {
     if (next.disabled) return;
     busy(next, true);
     const data = collect(form);
-    sendLead(data).then(() => {
+    sendLead(data).then(how => {
+      pkGoal(how === 'server' ? 'lead' : 'lead_mail');
       const err = form.querySelector('.form-err'); if (err) err.hidden = true;
-      if (!LEAD_URL) done.innerHTML = leadDoneHtml(data, 'Осталось отправить письмо');
+      if (how === 'mail') done.innerHTML = leadDoneHtml(data, 'Осталось отправить письмо');
       steps.forEach(s => s.hidden = true);
       done.hidden = false;
       form.querySelector('.q-bottom').hidden = true;
@@ -184,8 +203,9 @@ document.querySelectorAll('[data-lead]').forEach(form => {
     if (btn.disabled) return;
     busy(btn, true);
     const data = collect(form);
-    sendLead(data).then(() => {
-      form.innerHTML = LEAD_URL ? '<div class="done"><b>Спасибо!</b><p>Заявка у нас, скоро напишем.</p></div>'
+    sendLead(data).then(how => {
+      pkGoal(how === 'server' ? 'lead' : 'lead_mail');
+      form.innerHTML = how === 'server' ? '<div class="done"><b>Спасибо!</b><p>Заявка у нас, скоро напишем.</p></div>'
         : '<div class="done">' + leadDoneHtml(data, 'Осталось отправить письмо') + '</div>';
     }, () => { busy(btn, false); leadError(form, btn); });
   });
@@ -275,10 +295,10 @@ document.querySelectorAll('.btn-red, .btn-dark').forEach(b => {
 });
 
 // Уведомление о cookie: «Принять» или «Только необходимые».
-// Яндекс Метрика загружается только после «Принять». Номер счётчика впишите в METRIKA_ID.
+// Яндекс Метрика (счётчик 114160182) загружается только после «Принять». Вебвизор выключен: он записывает действия посетителя.
 (() => {
   const KEY = 'pocherk-cookies';
-  const METRIKA_ID = '';
+  const METRIKA_ID = PK_METRIKA_ID;
   const get = () => { try { return localStorage.getItem(KEY); } catch (e) { return null; } };
   const set = v => { try { localStorage.setItem(KEY, v); } catch (e) {} };
   let metrikaOn = false;
@@ -286,9 +306,9 @@ document.querySelectorAll('.btn-red, .btn-dark').forEach(b => {
     if (!METRIKA_ID || metrikaOn) return;
     metrikaOn = true;
     window.ym = window.ym || function () { (ym.a = ym.a || []).push(arguments); }; ym.l = +new Date();
-    const s = document.createElement('script'); s.async = true; s.src = 'https://mc.yandex.ru/metrika/tag.js';
+    const s = document.createElement('script'); s.async = true; s.src = 'https://mc.yandex.ru/metrika/tag.js?id=' + METRIKA_ID;
     document.head.appendChild(s);
-    ym(+METRIKA_ID, 'init', { clickmap: true, trackLinks: true, accurateTrackBounce: true, webvisor: false });
+    ym(METRIKA_ID, 'init', { clickmap: true, trackLinks: true, accurateTrackBounce: true, webvisor: false, referrer: document.referrer, url: location.href });
   };
   // путь до корня сайта берём из ссылки на стили: assets/, ../assets/ или ../../assets/
   const css = document.querySelector('link[rel="stylesheet"][href*="assets/style.css"]');
