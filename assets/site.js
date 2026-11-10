@@ -100,7 +100,7 @@ const LEAD_URL = /(^|\.)pocherkagency\.ru$/.test(location.hostname) ? '/api/lead
 const PK_METRIKA_ID = 114160182;
 const pkGoal = name => { try { if (typeof window.ym === 'function') window.ym(PK_METRIKA_ID, 'reachGoal', name); } catch (e) {} };
 const LEAD_EMAIL = 'sergei4icks@yandex.ru';
-const LEAD_LABELS = { service: 'Направление', have: 'Что уже есть', niche: 'Ниша', city: 'Город', goal: 'Задача', task: 'Задача', name: 'Имя', contact: 'Контакт' };
+const LEAD_LABELS = { service: 'Направление', have: 'Что уже есть', niche: 'Ниша', city: 'Город', goal: 'Задача', task: 'Задача', name: 'Имя', phone: 'Телефон', contact: 'Контакт' };
 const leadMailto = data => {
   const body = Object.keys(LEAD_LABELS).filter(k => data[k] && String(data[k]).trim())
     .map(k => LEAD_LABELS[k] + ': ' + String(data[k]).trim().slice(0, 600)).join('\n');
@@ -146,7 +146,9 @@ const leadError = (form, anchor) => {
   el.hidden = false;
 };
 // Обязательные поля: текст должен быть заполнен, галочка согласия — отмечена
-const isEmpty = x => x.type === 'checkbox' ? !x.checked : !x.value.trim();
+const isEmpty = x => x.type === 'checkbox' ? !x.checked
+  : x.type === 'tel' ? x.value.replace(/\D/g, '').length < 10
+  : !x.value.trim();
 const flagEmpty = x => {
   x.focus();
   if (x.type === 'checkbox') {
@@ -364,6 +366,9 @@ document.querySelectorAll('.btn-red, .btn-dark').forEach(b => {
     box.classList.remove('done');
   };
   const size = () => {
+    // на телефоне при прокрутке прячется адресная строка и приходит resize:
+    // если сам холст не изменился, не перерисовываем, иначе стёртое пропадает
+    if (W && cv.clientWidth === W && cv.clientHeight === H) return;
     dpr = Math.min(2, devicePixelRatio || 1);
     W = cv.clientWidth; H = cv.clientHeight;
     cv.width = W * dpr; cv.height = H * dpr;
@@ -373,8 +378,10 @@ document.querySelectorAll('.btn-red, .btn-dark').forEach(b => {
   size(); addEventListener('resize', size);
 
   let last = null;
+  const coarse = matchMedia('(pointer: coarse)').matches;
   const erase = (x, y) => {
-    const r = Math.max(36, W * .09);
+    const r = coarse ? Math.max(42, W * .13) : Math.max(36, W * .09);
+    const reach = Math.ceil(r * .7 / 24);
     ctx.save(); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.globalCompositeOperation = 'destination-out';
     const g = ctx.createRadialGradient(x, y, 0, x, y, r);
@@ -387,7 +394,7 @@ document.querySelectorAll('.btn-red, .btn-dark').forEach(b => {
       const py = last ? last[1] + (y - last[1]) * i / steps : y;
       ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2); ctx.fill();
       const c = Math.floor(px / 24), rw = Math.floor(py / 24);
-      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -reach; dy <= reach; dy++) for (let dx = -reach; dx <= reach; dx++) {
         const cc = c + dx, rr = rw + dy;
         if (cc < 0 || rr < 0 || cc >= cols || rr >= rows) continue;
         const k = rr * cols + cc;
@@ -405,9 +412,21 @@ document.querySelectorAll('.btn-red, .btn-dark').forEach(b => {
     }
   };
   const pos = e => { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
-  cv.addEventListener('pointermove', e => { box.classList.add('touched'); erase(...pos(e)); });
-  cv.addEventListener('pointerdown', e => { box.classList.add('touched'); last = null; erase(...pos(e)); });
-  cv.addEventListener('pointerleave', () => { last = null; });
+  // палец: стираем, только пока он прижат; мышь: стираем при наведении, как раньше
+  let down = false;
+  cv.addEventListener('pointerdown', e => {
+    down = true; box.classList.add('touched'); last = null;
+    if (e.pointerType !== 'mouse') { try { cv.setPointerCapture(e.pointerId); } catch (_) {} }
+    erase(...pos(e));
+  });
+  cv.addEventListener('pointermove', e => {
+    if (e.pointerType !== 'mouse' && !down) return;
+    box.classList.add('touched'); erase(...pos(e));
+  });
+  const up = () => { down = false; last = null; };
+  cv.addEventListener('pointerup', up);
+  cv.addEventListener('pointercancel', up);
+  cv.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') last = null; });
 })();
 
 // Линии-росчерки на тёмных экранах: пучки тонких штрихов, как след пера
@@ -473,4 +492,18 @@ document.querySelectorAll('.btn-red, .btn-dark').forEach(b => {
   document.querySelectorAll('[data-rail]').forEach(b => b.addEventListener('click', () => {
     if (rail) rail.scrollBy({ left: +b.dataset.rail * 248, behavior: still ? 'auto' : 'smooth' });
   }));
+})();
+
+// «Наши клиенты»: непрерывная бегущая строка (список дублируется, лента едет по кругу)
+(() => {
+  const box = document.querySelector('.hero-clients');
+  const list = box && box.querySelector('ul');
+  if (!list) return;
+  const view = document.createElement('div'); view.className = 'hc-view';
+  const track = document.createElement('div'); track.className = 'hc-track';
+  list.replaceWith(view); view.appendChild(track); track.appendChild(list);
+  const copy = list.cloneNode(true); copy.setAttribute('aria-hidden', 'true');
+  copy.querySelectorAll('img').forEach(i => i.alt = '');
+  track.appendChild(copy);
+  box.classList.add('is-marquee');
 })();

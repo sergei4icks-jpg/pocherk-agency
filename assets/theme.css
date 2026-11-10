@@ -441,3 +441,22 @@
 @media (max-width:900px){
   .top .logo img{content:url(../img/logo-word-plain.svg)}
 }
+
+/* «Сотри меня» на телефоне: палец на пятне стирает, а не прокручивает страницу (10.11.2026) */
+@media (pointer:coarse){.erase-canvas{touch-action:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}}
+
+/* «Наши клиенты» бегущей строкой (10.11.2026); список дублирует site.js */
+.hero-clients.is-marquee{flex-direction:row;align-items:center;gap:28px}
+.hero-clients.is-marquee .hc-view{flex:1;min-width:0;overflow:hidden;-webkit-mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent);mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent)}
+.hero-clients.is-marquee .hc-track{display:flex;width:max-content;animation:hc-run 32s linear infinite}
+.hero-clients.is-marquee ul{display:flex;flex-wrap:nowrap;justify-content:flex-start;gap:0;flex:none;width:auto}
+.hero-clients.is-marquee li{flex:none;padding:0 32px;height:44px}
+.hero-clients.is-marquee .hc-view:hover .hc-track{animation-play-state:paused}
+@keyframes hc-run{to{transform:translateX(-50%)}}
+@media (max-width:960px){
+  .hero-clients.is-marquee{flex-direction:column;align-items:stretch;gap:14px}
+  .hero-clients.is-marquee .hc-view{margin:0 -16px}
+  .hero-clients.is-marquee li{padding:0 22px}
+  .hero-clients.is-marquee .hc-track{animation-duration:24s}
+}
+@media (prefers-reduced-motion:reduce){.hero-clients.is-marquee .hc-track{animation-duration:90s}}
