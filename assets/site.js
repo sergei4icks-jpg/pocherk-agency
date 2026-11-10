@@ -83,12 +83,23 @@ document.querySelectorAll('[role="tablist"]').forEach(list => {
 });
 
 // Отправка заявки.
-// Адрес веб-приложения Google Apps Script (заявки/apps-script.gs): таблица + почта + Telegram.
-// Пока адрес пустой, заявка только выводится в консоль.
+// Пока заявки уходят письмом: кнопка открывает почту посетителя с готовым письмом на LEAD_EMAIL.
+// Google Apps Script (заявки/apps-script.gs) не подключаем: по 152-ФЗ данные сначала должны попадать в базу в РФ.
+// Когда появится российский приём, вписать адрес в LEAD_URL — форма начнёт отправлять туда.
 const LEAD_URL = '';
+const LEAD_EMAIL = 'sergei4icks@yandex.ru';
+const LEAD_LABELS = { service: 'Направление', have: 'Что уже есть', niche: 'Ниша', city: 'Город', goal: 'Задача', task: 'Задача', name: 'Имя', contact: 'Контакт' };
+const leadMailto = data => {
+  const body = Object.keys(LEAD_LABELS).filter(k => data[k] && String(data[k]).trim())
+    .map(k => LEAD_LABELS[k] + ': ' + String(data[k]).trim().slice(0, 600)).join('\n');
+  return 'mailto:' + LEAD_EMAIL + '?subject=' + encodeURIComponent('Заявка с сайта «Почерк»' + (data.name ? ': ' + data.name : ''))
+    + '&body=' + encodeURIComponent(body + '\n\nСтраница: ' + location.href);
+};
+const leadDoneHtml = (data, title) => '<b>' + title + '</b><p class="muted">Открылось письмо с вашей заявкой: нажмите в нём «Отправить». '
+  + 'Если почта не открылась, <a href="' + leadMailto(data) + '">откройте письмо ещё раз</a> или напишите на <a href="mailto:' + LEAD_EMAIL + '">' + LEAD_EMAIL + '</a>.</p>';
 function sendLead(data) {
-  if (!LEAD_URL) { console.log('Заявка (приём не подключён):', data); return Promise.resolve(); }
-  // text/plain, чтобы браузер не делал предварительный CORS-запрос, который Google не принимает
+  if (!LEAD_URL) { location.href = leadMailto(data); return Promise.resolve(); }
+  // text/plain, чтобы браузер не делал предварительный CORS-запрос
   return fetch(LEAD_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(data) })
     .then(r => r.json())
     .then(r => { if (!r.ok) throw new Error(r.msg || 'lead failed'); });
@@ -151,8 +162,10 @@ document.querySelectorAll('[data-quiz]').forEach(form => {
     if (req) { flagEmpty(req); return; }
     if (next.disabled) return;
     busy(next, true);
-    sendLead(collect(form)).then(() => {
+    const data = collect(form);
+    sendLead(data).then(() => {
       const err = form.querySelector('.form-err'); if (err) err.hidden = true;
+      if (!LEAD_URL) done.innerHTML = leadDoneHtml(data, 'Осталось отправить письмо');
       steps.forEach(s => s.hidden = true);
       done.hidden = false;
       form.querySelector('.q-bottom').hidden = true;
@@ -170,8 +183,10 @@ document.querySelectorAll('[data-lead]').forEach(form => {
     const btn = form.querySelector('[type="submit"]');
     if (btn.disabled) return;
     busy(btn, true);
-    sendLead(collect(form)).then(() => {
-      form.innerHTML = '<div class="done"><b>Спасибо!</b><p>Заявка у нас, скоро напишем.</p></div>';
+    const data = collect(form);
+    sendLead(data).then(() => {
+      form.innerHTML = LEAD_URL ? '<div class="done"><b>Спасибо!</b><p>Заявка у нас, скоро напишем.</p></div>'
+        : '<div class="done">' + leadDoneHtml(data, 'Осталось отправить письмо') + '</div>';
     }, () => { busy(btn, false); leadError(form, btn); });
   });
 });
