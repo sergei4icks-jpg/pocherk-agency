@@ -507,3 +507,26 @@ document.querySelectorAll('.btn-red, .btn-dark').forEach(b => {
   track.appendChild(copy);
   box.classList.add('is-marquee');
 })();
+
+/* Просмотр картинки крупно: ссылки с атрибутом data-zoom (сертификаты) */
+(function () {
+  document.addEventListener('click', function (e) {
+    var a = e.target.closest && e.target.closest('a[data-zoom]');
+    if (!a) return;
+    e.preventDefault();
+    var box = document.createElement('div');
+    box.className = 'zoom-box';
+    box.setAttribute('role', 'dialog');
+    box.setAttribute('aria-label', a.getAttribute('aria-label') || 'Просмотр');
+    var img = document.createElement('img');
+    img.src = a.href;
+    img.alt = (a.querySelector('img') || {}).alt || '';
+    box.appendChild(img);
+    document.body.appendChild(box);
+    requestAnimationFrame(function () { box.classList.add('on'); });
+    function close() { box.classList.remove('on'); setTimeout(function () { box.remove(); }, 250); document.removeEventListener('keydown', onKey); a.focus(); }
+    function onKey(ev) { if (ev.key === 'Escape') close(); }
+    box.addEventListener('click', close);
+    document.addEventListener('keydown', onKey);
+  });
+})();

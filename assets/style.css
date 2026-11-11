@@ -1150,3 +1150,25 @@ label.agree.need input{outline:2px solid var(--red);outline-offset:2px}
 .cookie .cookie-btns{display:flex;flex-direction:column;gap:8px;flex:none}
 .cookie .btn-ghost{min-height:40px;padding:0 18px;font-size:14px;background:none;border:1px solid var(--line);color:inherit;border-radius:999px;cursor:pointer}
 .cookie .btn-ghost:hover{border-color:currentColor}
+
+/* сертификаты: настоящие картинки, фамилия и номер размыты в самом файле */
+.ic-cert{flex-direction:row;justify-content:flex-start;gap:16px;padding:20px 18px;text-align:left;text-decoration:none;color:var(--ink);transition:background .25s}
+.ic-cert:hover{background:var(--soft)}
+.ic-cert-pic{flex:none;width:76px;aspect-ratio:420/594;border-radius:6px;overflow:hidden;box-shadow:0 6px 18px rgba(22,22,26,.16);transform:rotate(-3deg);transition:transform .35s}
+.ic-cert:hover .ic-cert-pic{transform:rotate(0) scale(1.06)}
+.ic-cert-pic img{display:block;width:100%;height:100%;object-fit:cover}
+.ic-cert-txt{display:flex;flex-direction:column;gap:4px;min-width:0}
+.ic-cert-txt i{align-self:flex-start;font:600 10.5px/1 var(--text);font-style:normal;letter-spacing:.06em;text-transform:uppercase;color:var(--red);background:rgba(179,18,43,.08);padding:5px 8px;border-radius:999px}
+.ic-cert-txt b{font-weight:600;font-size:clamp(14px,1.05vw,15px);line-height:1.3}
+.ic-cert-txt small{font-size:12.5px;color:var(--muted)}
+@media (max-width:760px){
+  .ic-certs .wrap{grid-template-columns:minmax(0,1fr)}
+  .ic-cert,.ic-cert:nth-of-type(1){border-left:0;padding:14px 0}
+  .ic-cert-pic{width:58px}
+}
+/* просмотр сертификата крупно */
+.zoom-box{position:fixed;inset:0;z-index:200;display:grid;place-items:center;padding:24px;background:rgba(12,13,18,.82);cursor:zoom-out;opacity:0;transition:opacity .25s}
+.zoom-box.on{opacity:1}
+.zoom-box img{max-width:min(560px,100%);max-height:calc(100svh - 48px);border-radius:10px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.ic-cert-note{grid-column:1/-1;margin:0;padding:14px 0 18px;border-top:1px solid var(--line);font-size:13.5px;line-height:1.5;color:var(--muted)}
+.ic-cert-txt i{text-transform:none;letter-spacing:0;font-size:11.5px}
