@@ -15,6 +15,8 @@ DirectoryIndex index.html index.php
   RewriteRule (^|/)\.(git|DS_Store) - [F,L]
   RewriteRule ^deploy\.sh$ - [F,L]
   RewriteRule ^api/news-lib\.php$ - [F,L]
+  # главная: подставляет три свежие новости из бота (home.php)
+  RewriteRule ^(index\.html)?$ home.php [L]
   # новости из бота: список, карта сайта и страницы заметок собирает PHP (данные вне сайта, см. api/news-lib.php)
   RewriteRule ^novosti/index\.html$ https://pocherkagency.ru/novosti/ [R=301,L]
   RewriteRule ^novosti/?$ novosti/index.php [L]
