@@ -2,6 +2,8 @@
 AddDefaultCharset utf-8
 Options -Indexes
 DirectoryIndex index.html index.php
+# своя страница «не найдено» вместо заглушки хостинга
+ErrorDocument 404 /404.html
 
 <IfModule mod_rewrite.c>
   RewriteEngine On
