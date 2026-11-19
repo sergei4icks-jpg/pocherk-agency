@@ -9,7 +9,14 @@
    поэтому сервер сам забирает их — cron раз в минуту запускает `php api/news-bot.php poll`, и тот слушает ~55 секунд.
    Веб-вход (webhook с секретом) оставлен на случай, если связь появится. */
 
-require __DIR__ . '/news-lib.php';
+require_once __DIR__ . '/news-lib.php';
+require_once __DIR__ . '/indexnow.php';
+
+/* Сообщить Яндексу через IndexNow: заметка, список новостей и главная (на ней три свежие новости) */
+function news_ping($slug) {
+  $site = news_cfg()['site_url'];
+  pk_indexnow([site_link($slug), $site . '/novosti/', $site . '/'], news_cfg()['data_dir']);
+}
 
 function say($chat, $text, $extra = []) {
   return news_tg('sendMessage', ['chat_id' => $chat, 'text' => $text, 'parse_mode' => 'HTML',
@@ -49,6 +56,7 @@ function handle_update(array $up) {
       if ($slug) {
         news_tg('editMessageReplyMarkup', ['chat_id' => $chat, 'message_id' => $msgId, 'reply_markup' => ['inline_keyboard' => []]]);
         say($chat, "✅ Опубликовано: " . news_h(site_link($slug)), ['reply_to_message_id' => $msgId]);
+        news_ping($slug);
         $note = 'Опубликовано';
       } else $note = 'Этого черновика уже нет';
     }
@@ -67,10 +75,20 @@ function handle_update(array $up) {
     elseif ($act === 'edit') {
       $it = $state['drafts'][$id] ?? null;
       if ($it) {
-        news_update(function (&$d) use ($id) { $d['await_edit'] = $id; $d['await_ai'] = null; });
+        news_update(function (&$d) use ($id) { $d['await_edit'] = $id; $d['await_ai'] = null; $d['await_more'] = false; });
         say($chat, "✏️ Правка черновика №$id. Нажмите на текст ниже, он скопируется. Исправьте и пришлите следующим сообщением. "
           . "Подписи разделов («Заголовок:», «Что делать:» и т.д.) оставьте. Можно прислать только те разделы, которые меняете.");
-        news_tg('sendMessage', ['chat_id' => $chat, 'text' => '<code>' . news_h(news_to_edit_text($it)) . '</code>', 'parse_mode' => 'HTML']);
+        /* текст для правки целиком; если длинный — несколькими блоками по разделам */
+        $full = news_to_edit_text($it);
+        if (mb_strlen($full, 'UTF-8') <= 3900) $blocks = ['<code>' . news_h($full) . '</code>'];
+        else {
+          $blocks = [];
+          foreach (NEWS_FIELDS as $k => [$label, $max]) {
+            $v = $it[$k] ?? '';
+            $blocks[] = '<code>' . news_h(in_array($k, ['what', 'who', 'todo', 'opinion'], true) ? "$label:\n$v" : "$label: $v") . '</code>';
+          }
+        }
+        news_send_parts($chat, $blocks);
         $note = 'Жду исправленный текст';
       } else $note = 'Этого черновика уже нет';
     }
@@ -78,7 +96,7 @@ function handle_update(array $up) {
     /* «Доработать»: просьба своими словами, её выполняет редактор-нейросеть на Mac (новости-робот/revise.py) */
     elseif ($act === 'ai') {
       if (isset($state['drafts'][$id])) {
-        news_update(function (&$d) use ($id) { $d['await_ai'] = $id; $d['await_edit'] = null; });
+        news_update(function (&$d) use ($id) { $d['await_ai'] = $id; $d['await_edit'] = null; $d['await_more'] = false; });
         say($chat, "🤖 Что доработать в черновике №$id? Напишите обычными словами, например: «добавь, какие бренды уже ведут эфиры на Маркете» или «сделай мнение острее». Можно попросить найти факты в интернете.");
         $note = 'Жду просьбу';
       } else $note = 'Этого черновика уже нет';
@@ -98,6 +116,7 @@ function handle_update(array $up) {
         return null;
       });
       if ($newId) {
+        news_ping($id);
         $it = news_read()['drafts'][$newId];
         say($chat, "Снято с сайта. Заметка снова в черновиках, ниже. Её можно поправить и опубликовать заново или удалить.");
         $mid = news_send_draft($chat, $it, $newId);
@@ -134,8 +153,32 @@ function handle_update(array $up) {
   }
   if ((string)$chat !== (string)$admin) { say($chat, 'Это служебный бот агентства «Почерк».'); return; }
 
+  /* Кнопки внизу чата (всегда под рукой) */
+  $KB = ['reply_markup' => ['keyboard' => [[['text' => '📰 Ещё новости'], ['text' => '📋 Черновики']], [['text' => '🌐 На сайте']]],
+    'resize_keyboard' => true, 'is_persistent' => true]];
+  if ($text === '📋 Черновики') $text = '/drafts';
+  if ($text === '🌐 На сайте') $text = '/list';
+  $askMore = ($text === '📰 Ещё новости' || $text === '/more');
+  /* «предложи ещё 3 про маркетплейсы» можно написать и без кнопки */
+  $moreNow = !$askMore && $text !== '' && $text[0] !== '/' && $state['await_ai'] === null && $state['await_edit'] === null
+    && (!empty($state['await_more']) || preg_match('/^(ещё|еще|предложи|найди|подбери|пришли|дай)(\s|$)/iu', $text));
+
   if ($text === '/start' || $text === '/help') {
-    say($chat, "Черновики новостей приходят сюда сами. Под каждым кнопки:\n✅ «Опубликовать» — сразу на сайт\n✏️ «Править сама» — бот пришлёт текст, вы исправите и отправите\n🤖 «Доработать» — напишите просьбу словами, редактор перепишет и пришлёт новую версию\n🗑 «Удалить»\n\n/list — опубликованные заметки\n/drafts — черновики, которые ещё ждут решения");
+    say($chat, "Черновики новостей приходят сюда каждое утро. Под каждым кнопки:\n✅ «Опубликовать» — сразу на сайт\n✏️ «Править сама» — бот пришлёт текст, вы исправите и отправите\n🤖 «Доработать» — напишите просьбу словами, редактор перепишет и пришлёт новую версию\n🗑 «Удалить»\n\nВнизу чата:\n📰 «Ещё новости» — попросить новые черновики, можно с темой, например «ещё 2 про маркетплейсы»\n📋 «Черновики» — что ещё ждёт решения\n🌐 «На сайте» — опубликованные заметки, их можно снять", $KB);
+  }
+  elseif ($askMore) {
+    news_update(function (&$d) { $d['await_more'] = true; $d['await_ai'] = null; $d['await_edit'] = null; });
+    say($chat, "Какие новости найти? Напишите одним сообщением, например:\n— «ещё 3»\n— «2 про маркетплейсы»\n— «что-нибудь про нейросети в рекламе»\n— «про рынок недвижимости, если есть интересное»", $KB);
+  }
+  elseif ($moreNow) {
+    $rid = news_update(function (&$d) use ($text) {
+      $d['await_more'] = false;
+      $rid = (string)(++$d['rseq']);
+      $d['requests'][$rid] = ['kind' => 'more', 'text' => mb_substr($text, 0, 1000, 'UTF-8'), 'status' => 'new',
+        'created' => news_now()->format('Y-m-d H:i:s'), 'taken' => 0];
+      return $rid;
+    });
+    say($chat, "Принято, ищу. Новые черновики придут сюда, обычно в течение 15 минут (с 8 до 23 по вашему времени). Если Mac выключен, найду, когда он включится.", $KB);
   }
   elseif ($text === '/list') {
     $pub = array_slice(news_published(), 0, 10);
@@ -189,11 +232,14 @@ function handle_update(array $up) {
     }
   }
   else {
-    say($chat, 'Чтобы поправить черновик, нажмите под ним «Править сама» или «Доработать».');
+    say($chat, 'Чтобы поправить черновик, нажмите под ним «Править сама» или «Доработать». Чтобы попросить новые новости, нажмите внизу «📰 Ещё новости».', $KB);
   }
 }
 
-/* ===== Запуск из cron: забираем сообщения сами ===== */
+/* api/news-relay.php подключает этот файл только ради handle_update() */
+if (defined('NEWS_BOT_LIB_ONLY')) return;
+
+/* ===== Запуск из cron: забираем сообщения сами (до 14.11.2026; теперь сообщения приносит ретранслятор с Mac) ===== */
 if (PHP_SAPI === 'cli') {
   if (($argv[1] ?? '') !== 'poll') { fwrite(STDERR, "usage: php news-bot.php poll\n"); exit(1); }
   $dir = dirname(news_file());
@@ -203,12 +249,13 @@ if (PHP_SAPI === 'cli') {
   $offset = (int)@file_get_contents($offFile);
   $until = time() + 55;
   while (time() < $until) {
-    $wait = max(1, min(25, $until - time()));
-    $r = news_tg('getUpdates', ['offset' => $offset, 'timeout' => $wait, 'allowed_updates' => ['message', 'callback_query']], $wait + 10);
+    /* короткие запросы без долгого ожидания: долгие соединения из РФ к Telegram обрываются */
+    $r = news_tg('getUpdates', ['offset' => $offset, 'timeout' => 0, 'allowed_updates' => ['message', 'callback_query']], 8);
     if (empty($r['ok'])) {
       @file_put_contents($dir . '/poll.log', date('Y-m-d H:i:s') . ' getUpdates failed: ' . ($r['description'] ?? 'нет ответа') . "\n", FILE_APPEND);
-      sleep(5); continue;
+      sleep(2); continue;
     }
+    if (!$r['result']) { sleep(2); continue; }
     foreach ($r['result'] as $up) {
       $offset = $up['update_id'] + 1;
       file_put_contents($offFile, (string)$offset);

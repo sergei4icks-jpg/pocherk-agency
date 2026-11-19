@@ -13,7 +13,7 @@ function news_cfg() {
     $all = require (file_exists($f) ? $f : __DIR__ . '/config.sample.php');
     $cfg = ($all['news'] ?? []) + [
       'tg_token' => '', 'webhook_secret' => '', 'draft_key' => '', 'claim_code' => '',
-      'data_dir' => __DIR__ . '/data/news',
+      'data_dir' => __DIR__ . '/data/news', 'relay' => false,
     ];
     $cfg['site_url'] = rtrim($all['site_url'] ?? 'https://pocherkagency.ru', '/');
     $cfg['timezone'] = $all['timezone'] ?? 'Europe/Moscow';
@@ -32,7 +32,7 @@ function news_file() {
 
 function news_empty() {
   return ['admin' => null, 'seq' => 0, 'drafts' => [], 'published' => [], 'seen' => [], 'await_edit' => null,
-    'await_ai' => null, 'requests' => [], 'rseq' => 0];
+    'await_ai' => null, 'await_more' => false, 'requests' => [], 'rseq' => 0];
 }
 
 function news_read() {
@@ -137,35 +137,98 @@ function news_date_ru($ymd) {
 
 /* ===== Telegram ===== */
 
+/* Запрос к Telegram. Связь хостинга в РФ с api.telegram.org нестабильна (соединения обрываются),
+   поэтому короткие таймауты и до трёх попыток. getUpdates не повторяем: его и так спрашивают каждые пару секунд. */
 function news_tg($method, array $params, $timeout = 15) {
   $token = news_cfg()['tg_token'];
   if ($token === '') return null;
-  $ch = curl_init("https://api.telegram.org/bot$token/$method");
-  curl_setopt_array($ch, [
-    CURLOPT_POST => true, CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => $timeout,
-    CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
-    CURLOPT_POSTFIELDS => json_encode($params, JSON_UNESCAPED_UNICODE),
-  ]);
-  $res = json_decode((string)curl_exec($ch), true);
-  curl_close($ch);
+  /* Режим ретранслятора (news.relay в config.php): сервер в РФ к Telegram сам не ходит,
+     а складывает сообщения в очередь; их забирает и отправляет новости-робот/relay.py на Mac */
+  if ($method !== 'getUpdates' && !empty(news_cfg()['relay'])) {
+    news_outbox_add($method, $params);
+    return ['ok' => true, 'result' => ['message_id' => -1], 'queued' => true];
+  }
+  $tries = $method === 'getUpdates' ? 1 : 3;
+  $res = null;
+  for ($i = 0; $i < $tries; $i++) {
+    if ($i > 0) sleep(1);
+    $ch = curl_init("https://api.telegram.org/bot$token/$method");
+    curl_setopt_array($ch, [
+      CURLOPT_POST => true, CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => $timeout, CURLOPT_CONNECTTIMEOUT => 5,
+      CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
+      CURLOPT_POSTFIELDS => json_encode($params, JSON_UNESCAPED_UNICODE),
+    ]);
+    $res = json_decode((string)curl_exec($ch), true);
+    curl_close($ch);
+    if (is_array($res)) return $res;   // ответ Telegram (в том числе с ошибкой) — повторять незачем
+  }
   return $res;
+}
+
+/* ===== Очередь исходящих сообщений для ретранслятора ===== */
+
+function news_outbox_update(callable $fn) {
+  $f = dirname(news_file()) . '/outbox.json';
+  $fp = fopen($f, 'c+');
+  if (!$fp || !flock($fp, LOCK_EX)) throw new RuntimeException('outbox locked');
+  $o = json_decode((string)stream_get_contents($fp), true);
+  if (!is_array($o)) $o = ['seq' => 0, 'items' => []];
+  $ret = $fn($o);
+  ftruncate($fp, 0); rewind($fp);
+  fwrite($fp, json_encode($o, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+  fflush($fp); flock($fp, LOCK_UN); fclose($fp);
+  @chmod($f, 0600);
+  return $ret;
+}
+
+function news_outbox_add($method, array $params) {
+  news_outbox_update(function (&$o) use ($method, $params) {
+    $id = (string)(++$o['seq']);
+    $o['items'][$id] = ['method' => $method, 'params' => $params, 'taken' => 0, 'created' => time()];
+  });
 }
 
 function news_h($s) { return htmlspecialchars((string)$s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'); }
 
-/* Карточка черновика для Telegram (HTML-разметка Telegram, не длиннее лимита) */
+/* Карточка черновика для Telegram: список кусков HTML (разделов) без обрезки.
+   Если всё не влезает в одно сообщение (лимит Telegram 4096 знаков), news_send_parts делит по разделам. */
 function news_tg_card(array $it, $id) {
-  $cut = function ($s, $n) { return mb_strlen($s, 'UTF-8') > $n ? mb_substr($s, 0, $n, 'UTF-8') . '…' : $s; };
-  $t = "📝 <b>Черновик №$id</b> · " . news_h($it['tag']) . "\n\n"
-     . '<b>' . news_h($it['title']) . "</b>\n<i>" . news_h($it['lead']) . "</i>\n\n"
-     . "<b>Что случилось</b>\n" . news_h($cut($it['what'], 950)) . "\n\n";
-  if ($it['who'] !== '') $t .= "<b>Кого касается</b>\n" . news_h($cut($it['who'], 500)) . "\n\n";
-  if (($it['opinion'] ?? '') !== '') $t .= "<b>Мнение редакции</b>\n" . news_h($cut($it['opinion'], 700)) . "\n\n";
-  $t .= "<b>Что делать</b>\n" . news_h($cut($it['todo'], 950));
+  /* ссылка на источник — сразу под заголовком и ещё раз в конце, полным адресом, чтобы было видно и можно было открыть */
+  $src = '';
   if ($it['source_url'] !== '') {
-    $t .= "\n\nИсточник: <a href=\"" . news_h($it['source_url']) . '">' . news_h($it['source_name'] ?: 'ссылка') . '</a>';
+    $src = '🔗 <b>Источник: ' . news_h($it['source_name'] ?: parse_url($it['source_url'], PHP_URL_HOST)) . "</b>\n"
+         . news_h($it['source_url']);
   }
-  return $t;
+  $parts = ["📝 <b>Черновик №$id</b> · " . news_h($it['tag']) . "\n\n<b>" . news_h($it['title']) . "</b>\n<i>" . news_h($it['lead']) . '</i>'];
+  if ($src !== '') $parts[] = $src;
+  $parts[] = "<b>Что случилось</b>\n" . news_h($it['what']);
+  if ($it['who'] !== '') $parts[] = "<b>Кого касается</b>\n" . news_h($it['who']);
+  if (($it['opinion'] ?? '') !== '') $parts[] = "<b>Мнение редакции</b>\n" . news_h($it['opinion']);
+  $parts[] = "<b>Что делать</b>\n" . news_h($it['todo']);
+  if ($src !== '') $parts[] = $src;
+  return $parts;
+}
+
+/* Видимая длина HTML-текста для Telegram (теги и &amp; не считаются) */
+function news_tg_len($html) { return mb_strlen(html_entity_decode(strip_tags($html), ENT_QUOTES, 'UTF-8'), 'UTF-8'); }
+
+/* Отправляет куски одним или несколькими сообщениями, не разрывая кусок; $extra (кнопки) — под последним.
+   Возвращает id последнего сообщения или null. */
+function news_send_parts($chat, array $parts, array $extra = [], $limit = 3900) {
+  $msgs = []; $cur = '';
+  foreach ($parts as $p) {
+    $try = $cur === '' ? $p : $cur . "\n\n" . $p;
+    if ($cur !== '' && news_tg_len($try) > $limit) { $msgs[] = $cur; $cur = $p; } else $cur = $try;
+  }
+  if ($cur !== '') $msgs[] = $cur;
+  $last = null;
+  foreach ($msgs as $i => $m) {
+    $params = ['chat_id' => $chat, 'text' => $m, 'parse_mode' => 'HTML', 'link_preview_options' => ['is_disabled' => true]];
+    if ($i === count($msgs) - 1) $params += $extra;
+    $r = news_tg('sendMessage', $params);
+    $last = $r['result']['message_id'] ?? $last;
+  }
+  return $last;
 }
 
 function news_tg_buttons($id) {
@@ -175,13 +238,11 @@ function news_tg_buttons($id) {
   ]];
 }
 
-/* Отправляет черновик хозяйке бота; возвращает id сообщения или null. $note — строка над карточкой (например, «новая версия») */
+/* Отправляет черновик хозяйке бота целиком; возвращает id сообщения с кнопками или null. $note — строка над карточкой */
 function news_send_draft($chat, array $it, $id, $note = '') {
-  $r = news_tg('sendMessage', [
-    'chat_id' => $chat, 'text' => ($note !== '' ? $note . "\n\n" : '') . news_tg_card($it, $id), 'parse_mode' => 'HTML',
-    'link_preview_options' => ['is_disabled' => true], 'reply_markup' => news_tg_buttons($id),
-  ]);
-  return $r['result']['message_id'] ?? null;
+  $parts = news_tg_card($it, $id);
+  if ($note !== '') $parts[0] = $note . "\n\n" . $parts[0];
+  return news_send_parts($chat, $parts, ['reply_markup' => news_tg_buttons($id)]);
 }
 
 /* ===== Вёрстка на сайте ===== */

@@ -20,11 +20,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && isset($_GET['requests'])) {
     foreach ($d['requests'] as $rid => &$r) {
       if ($r['status'] === 'done') continue;
       if ($r['status'] === 'work' && time() - (int)$r['taken'] < 1200) continue;
-      if (!isset($d['drafts'][$r['draft']]) || (int)($r['tries'] ?? 0) >= 3) { $r['status'] = 'done'; continue; }
+      $more = ($r['kind'] ?? '') === 'more';
+      if ((!$more && !isset($d['drafts'][$r['draft']])) || (int)($r['tries'] ?? 0) >= 3) { $r['status'] = 'done'; continue; }
       $r['status'] = 'work'; $r['taken'] = time(); $r['tries'] = (int)($r['tries'] ?? 0) + 1;
+      if ($more) { $out[] = ['rid' => (string)$rid, 'kind' => 'more', 'text' => $r['text']]; continue; }
       $it = $d['drafts'][$r['draft']];
       unset($it['msg_id'], $it['created']);
-      $out[] = ['rid' => (string)$rid, 'draft' => $r['draft'], 'text' => $r['text'], 'item' => $it];
+      $out[] = ['rid' => (string)$rid, 'kind' => 'revise', 'draft' => $r['draft'], 'text' => $r['text'], 'item' => $it];
     }
     unset($r);
     $d['requests'] = array_filter($d['requests'], function ($r) { return $r['status'] !== 'done'; });
@@ -43,6 +45,17 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') out(405, ['ok' => false]);
 $raw = (string)file_get_contents('php://input');
 if (strlen($raw) > 200000) out(413, ['ok' => false, 'msg' => 'too large']);
 $in = json_decode($raw, true);
+
+/* Просьба «ещё новости» выполнена (черновики уже отправлены обычным POST items) или не вышла:
+   {"action":"done","rid":"7"} или {"action":"done","rid":"7","message":"Свежих новостей про … не нашлось"} */
+if (($in['action'] ?? '') === 'done') {
+  $rid = (string)($in['rid'] ?? '');
+  news_update(function (&$x) use ($rid) { unset($x['requests'][$rid]); });
+  $admin = news_read()['admin'];
+  $msg = trim((string)($in['message'] ?? ''));
+  if ($admin !== null && $msg !== '') news_tg('sendMessage', ['chat_id' => $admin, 'text' => mb_substr($msg, 0, 1000, 'UTF-8')]);
+  out(200, ['ok' => true]);
+}
 
 /* Результат доработки: {"action":"revise","rid":"1","item":{…}} или {"action":"revise","rid":"1","error":"…"} */
 if (($in['action'] ?? '') === 'revise') {
